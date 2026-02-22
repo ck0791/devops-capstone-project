@@ -6,12 +6,25 @@ and SQL database
 """
 import sys
 from flask import Flask
+from flask_talisman import Talisman   # ← NEW: security headers
+from flask_cors import CORS           # ← NEW: CORS policies
 from service import config
 from service.common import log_handlers
 
 # Create Flask application
 app = Flask(__name__)
 app.config.from_object(config)
+
+# ── Security ──────────────────────────────────────────────────────────────────
+# Flask-Talisman: adds secure HTTP headers to every response.
+# Talisman will also redirect plain-HTTP requests to HTTPS by default;
+# tests override that behaviour by setting talisman.force_https = False.
+talisman = Talisman(app)   # ← NEW
+
+# Flask-Cors: adds Access-Control-Allow-Origin: * to every response,
+# which lets browsers make cross-origin requests to this API.
+CORS(app)                  # ← NEW
+# ─────────────────────────────────────────────────────────────────────────────
 
 # Import the routes After the Flask app is created
 # pylint: disable=wrong-import-position, cyclic-import, wrong-import-order
