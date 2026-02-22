@@ -12,12 +12,17 @@ from tests.factories import AccountFactory
 from service.common import status  # HTTP Status Codes
 from service.models import db, Account, init_db
 from service.routes import app
+from service import talisman  # ← NEW: needed to disable force_https during tests
 
 DATABASE_URI = os.getenv(
     "DATABASE_URI", "postgresql://postgres:postgres@localhost:5432/postgres"
 )
 
 BASE_URL = "/accounts"
+
+# ── NEW: tells the Flask test client to pretend requests arrive over HTTPS ────
+HTTPS_ENVIRON = {'wsgi.url_scheme': 'https'}
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 ######################################################################
@@ -34,6 +39,10 @@ class TestAccountService(TestCase):
         app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URI
         app.logger.setLevel(logging.CRITICAL)
         init_db(app)
+        # ── NEW: Talisman redirects plain HTTP → HTTPS by default, which
+        # breaks every test that doesn't pass HTTPS_ENVIRON.  Turn it off
+        # for the test suite; individual tests opt-in via environ_overrides.
+        talisman.force_https = False  # ← NEW
 
     @classmethod
     def tearDownClass(cls):
@@ -218,3 +227,28 @@ class TestAccountService(TestCase):
         """It should not allow an illegal method call"""
         resp = self.client.delete(BASE_URL)
         self.assertEqual(resp.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    ######################################################################
+    # T E S T   S E C U R I T Y   H E A D E R S   ( N E W )
+    ######################################################################
+
+    def test_security_headers(self):
+        """It should return security headers"""
+        # Use HTTPS_ENVIRON so Talisman serves the page instead of redirecting
+        response = self.client.get('/', environ_overrides=HTTPS_ENVIRON)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        headers = {
+            'X-Frame-Options': 'SAMEORIGIN',
+            'X-Content-Type-Options': 'nosniff',
+            'Content-Security-Policy': "default-src 'self'; object-src 'none'",
+            'Referrer-Policy': 'strict-origin-when-cross-origin'
+        }
+        for key, value in headers.items():
+            self.assertEqual(response.headers.get(key), value)
+
+    def test_cors_security(self):
+        """It should return a CORS header"""
+        response = self.client.get('/', environ_overrides=HTTPS_ENVIRON)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Flask-Cors adds this header to every response
+        self.assertEqual(response.headers.get('Access-Control-Allow-Origin'), '*')
