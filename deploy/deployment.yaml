@@ -18,7 +18,7 @@ spec:
         app: accounts
     spec:
       containers:
-      - image: us.icr.io/sn-labs-christophkno/accounts:1
+      - image: IMAGE_NAME_HERE   # ← replaced hardcoded image; sed will inject the real name at deploy time
         name: accounts
         resources: {}
 
